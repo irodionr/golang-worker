@@ -6,11 +6,11 @@ import (
 	"time"
 )
 
-// Job contains job duration and status
+// Job contains ticker, job duration and status
 type Job struct {
 	Ticker   *time.Ticker
 	Duration time.Duration
-	Status   int // 0 - not done, 1 - in progress, 2 - stopped
+	Status   int // 0 - not started, 1 - in progress, 2 - waiting
 }
 
 // Worker schedules jobs and works on them
@@ -41,18 +41,20 @@ func (w *Worker) Add(p, d time.Duration) {
 	fmt.Printf("Added job %v to worker: period = %v, duration = %v\n", len(w.Jobs)-1, p, d)
 }
 
-// Work starts work on a job
+// Work starts work on a job until the ticker is stopped
 func (w *Worker) Work(i int) {
 	if w.Jobs[i].Status == 0 {
-		w.Jobs[i].Status = 1
-
 		for ; true; <-w.Jobs[i].Ticker.C {
+			w.Jobs[i].Status = 1
 			fmt.Println("Started working on job", i)
 
 			w.Jobs[i].Do()
-			fmt.Println("Finished working on job", i)
 
-			if w.Jobs[i].Status == 2 {
+			if w.Jobs[i].Status == 1 {
+				fmt.Printf("Job %v is waiting\n", i)
+				w.Jobs[i].Status = 2
+			} else {
+				fmt.Println("Finished working on job", i)
 				w.Wg.Done()
 			}
 		}
@@ -68,11 +70,16 @@ func (w *Worker) Start() {
 
 // Stop stops job i from starting again
 func (w *Worker) Stop(i int) {
-	if w.Jobs[i].Status == 1 {
+	if w.Jobs[i].Status != 0 {
 		w.Jobs[i].Ticker.Stop()
 
-		w.Jobs[i].Status = 2
-		fmt.Println("Stopped repeating job", i)
+		if w.Jobs[i].Status == 1 {
+			fmt.Println("Stopped repeating job", i)
+			w.Jobs[i].Status = 2
+		} else {
+			fmt.Println("Stopped repeating and finished job", i)
+			w.Wg.Done()
+		}
 	}
 }
 
